@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>submit · cowboysdocowboyshit</title>
+  <meta name="description" content="Submit your cowboy shit." />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="submit-page">
+  <header class="topbar">
+    <a class="brand" href="/">cowboysdocowboyshit</a>
+    <nav>
+      <a href="/vote">vote</a>
+      <a href="/leaderboard">leaderboard</a>
+      <a href="/submit" class="active">submit</a>
+    </nav>
+  </header>
+  <main>
+    <form class="form-card" id="submit-form">
+      <h1>submit cowboy shit</h1>
+      <p>Photo or short video (≤30s). Goes into the moderation queue first — wait a beat, then it shows up on the feed.</p>
+
+      <div class="media-toggle" role="tablist" aria-label="Media type">
+        <button type="button" class="active" data-kind="photo">photo</button>
+        <button type="button" data-kind="video">video</button>
+      </div>
+
+      <div id="photo-fields">
+        <label for="photo">photo (jpg, png, webp, heic — 8MB max)</label>
+        <input type="file" name="media" id="photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" />
+      </div>
+
+      <div id="video-fields" hidden>
+        <label for="video">video (mp4, mov — 30s max, ~100MB)</label>
+        <input type="file" name="media" id="video" accept="video/mp4,video/quicktime,video/webm" />
+        <p class="helper">Long videos get rejected at upload. We transcode the rest server-side.</p>
+      </div>
+
+      <div>
+        <label for="caption">caption (optional · 140)</label>
+        <textarea id="caption" maxlength="140" placeholder="what is this. why is it cowboy."></textarea>
+      </div>
+
+      <div>
+        <label for="display_name">display name (optional · 40)</label>
+        <input type="text" id="display_name" maxlength="40" placeholder="anonymous cowboy" />
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="age_gate" required />
+        <label for="age_gate" style="text-transform:none; letter-spacing:0; font-size:0.9rem; color:var(--ink-dim)">
+          I'm 18+, this is mine to post, no one in it is being harmed, and it's not someone else's copyright.
+          <a href="/terms" style="color:var(--ink)">terms</a>.
+        </label>
+      </div>
+
+      <div class="progress" id="progress" hidden><span></span></div>
+      <div class="error" id="err" hidden></div>
+      <div class="success" id="ok" hidden></div>
+
+      <button class="btn" type="submit" id="submit-btn">submit</button>
+    </form>
+  </main>
+
+  <footer class="footer">
+    <a href="/about">about</a>
+    <a href="/terms">terms</a>
+    <a href="/privacy">privacy</a>
+    <a href="/dmca">dmca</a>
+  </footer>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const toggleBtns = document.querySelectorAll(".media-toggle button");
+    const photoFields = $("#photo-fields");
+    const videoFields = $("#video-fields");
+    const photoInput = $("#photo");
+    const videoInput = $("#video");
+    const form = $("#submit-form");
+    const errEl = $("#err");
+    const okEl = $("#ok");
+    const submitBtn = $("#submit-btn");
+    const progress = $("#progress");
+    const progressBar = progress.querySelector("span");
+
+    let kind = "photo";
+    toggleBtns.forEach((b) => {
+      b.addEventListener("click", () => {
+        kind = b.dataset.kind;
+        toggleBtns.forEach((x) => x.classList.toggle("active", x === b));
+        photoFields.hidden = kind !== "photo";
+        videoFields.hidden = kind !== "video";
+      });
+    });
+
+    function showErr(msg) { errEl.textContent = msg; errEl.hidden = false; okEl.hidden = true; }
+    function clearMsg() { errEl.hidden = true; okEl.hidden = true; }
+    function setProgress(p) {
+      progress.hidden = p == null;
+      if (p != null) progressBar.style.width = `${Math.round(p * 100)}%`;
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearMsg();
+      submitBtn.disabled = true;
+      submitBtn.textContent = "uploading…";
+      try {
+        if (!$("#age_gate").checked) throw new Error("you have to check the box");
+        const caption = $("#caption").value.trim();
+        const display_name = $("#display_name").value.trim();
+
+        if (kind === "photo") {
+          const file = photoInput.files?.[0];
+          if (!file) throw new Error("pick a photo");
+          if (file.size > 8 * 1024 * 1024) throw new Error("photo is over 8MB");
+
+          const fd = new FormData();
+          fd.append("media", file);
+          fd.append("caption", caption);
+          fd.append("display_name", display_name);
+          fd.append("age_gate", "yes");
+          setProgress(0.1);
+          const res = await fetch("/api/submit/photo", { method: "POST", body: fd });
+          setProgress(1);
+          const json = await res.json();
+          if (!res.ok) throw new Error(humanError(json));
+          location.href = `/submit/thanks?slug=${json.slug}`;
+        } else {
+          const file = videoInput.files?.[0];
+          if (!file) throw new Error("pick a video");
+          if (file.size > 100 * 1024 * 1024) throw new Error("video is over 100MB");
+
+          // 1) get a one-time Stream upload URL
+          const initRes = await fetch("/api/submit/video/init", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caption, display_name, age_gate: "yes" }),
+          });
+          const init = await initRes.json();
+          if (!initRes.ok) throw new Error(humanError(init));
+
+          // 2) upload directly to Stream
+          await uploadWithProgress(init.uploadURL, file, (p) => setProgress(p));
+
+          // 3) finalize
+          const finRes = await fetch("/api/submit/video/finalize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: init.id, uid: init.uid }),
+          });
+          const fin = await finRes.json();
+          if (!finRes.ok) throw new Error(humanError(fin));
+          location.href = `/submit/thanks?slug=${init.slug}`;
+        }
+      } catch (err) {
+        showErr(err.message || "something went wrong");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "submit";
+        setProgress(null);
+      }
+    });
+
+    function humanError(j) {
+      if (j.error === "rate_limited") return "you're submitting too fast. wait an hour.";
+      if (j.error === "size") return "file is too big.";
+      if (j.error === "type") return "we don't accept that file type.";
+      if (j.error === "age_gate") return "you have to check the box.";
+      return j.error || "upload failed";
+    }
+
+    function uploadWithProgress(url, file, onProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", url);
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) onProgress(e.loaded / e.total);
+        });
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`upload failed (${xhr.status})`));
+        });
+        xhr.addEventListener("error", () => reject(new Error("network error")));
+        const fd = new FormData();
+        fd.append("file", file);
+        xhr.send(fd);
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>leaderboard · cowboysdocowboyshit</title>
+  <meta name="description" content="The most cowboy shit on the internet. Today, this week, all-time." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="leaderboard-page">
+  <header class="topbar">
+    <a class="brand" href="/">cowboysdocowboyshit</a>
+    <nav>
+      <a href="/vote">vote</a>
+      <a href="/leaderboard" class="active">leaderboard</a>
+      <a href="/submit">submit</a>
+    </nav>
+  </header>
+  <main>
+    <h1>leaderboard</h1>
+    <div class="tabs" role="tablist">
+      <button class="active" data-period="today">today</button>
+      <button data-period="week">this week</button>
+      <button data-period="all">all time</button>
+    </div>
+    <div class="lb-grid" id="grid"></div>
+    <div id="empty-state" hidden style="text-align:center;padding:3rem 0;color:var(--ink-dim)">
+      <p>nothing's been ranked yet for this period.</p>
+      <p style="margin-top:1rem"><a class="btn" href="/vote">go vote</a></p>
+    </div>
+  </main>
+
+  <script>
+    const tabs = document.querySelectorAll(".tabs button");
+    const grid = document.getElementById("grid");
+    const emptyState = document.getElementById("empty-state");
+    let period = "today";
+
+    function escapeHtml(s) {
+      return (s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+
+    async function load() {
+      grid.innerHTML = "";
+      emptyState.hidden = true;
+      const r = await fetch(`/api/leaderboard?period=${period}`);
+      const j = await r.json();
+      if (!j.items.length) { emptyState.hidden = false; return; }
+      grid.innerHTML = j.items.map((it, i) => {
+        const img = it.poster_url || it.media_url;
+        const credit = it.display_name || "anonymous";
+        return `<a class="lb-card" href="/c/${it.slug}">
+          <span class="lb-rank">${i + 1}</span>
+          <img src="${escapeHtml(img)}" alt="" loading="lazy" />
+          <div class="lb-meta">
+            <div class="lb-score">${it.rating}</div>
+            <div class="lb-credit">${escapeHtml(credit)}</div>
+          </div>
+        </a>`;
+      }).join("");
+    }
+
+    tabs.forEach((b) => {
+      b.addEventListener("click", () => {
+        tabs.forEach((x) => x.classList.toggle("active", x === b));
+        period = b.dataset.period;
+        load();
+      });
+    });
+
+    load();
+    setInterval(load, 60_000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>vote · cowboysdocowboyshit</title>
+  <meta name="description" content="Rank how cowboy it is." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="vote-page">
+  <header class="topbar">
+    <a class="brand" href="/">cowboysdocowboyshit</a>
+    <nav>
+      <a href="/vote" class="active">vote</a>
+      <a href="/leaderboard">leaderboard</a>
+      <a href="/submit">submit</a>
+    </nav>
+  </header>
+  <section class="vote-stage" id="stage">
+    <div class="vote-empty" id="empty" hidden>
+      <h2>you've voted on everything</h2>
+      <p>Come back when there's more cowboy shit. Or <a href="/submit" style="color:var(--accent);border-bottom:1px solid var(--rule)">submit some yourself</a>.</p>
+    </div>
+    <div class="vote-paused" id="paused" hidden>
+      <h2>feed is paused</h2>
+      <p>We're sorting something out. Back shortly.</p>
+    </div>
+  </section>
+  <div class="vote-actions">
+    <button class="nope" id="btn-nope" type="button">not cowboy</button>
+    <button class="skip" id="btn-skip" type="button">skip</button>
+    <button class="yep" id="btn-yep" type="button">cowboy</button>
+  </div>
+
+  <script>
+    const stage = document.getElementById("stage");
+    const empty = document.getElementById("empty");
+    const paused = document.getElementById("paused");
+    const btnNope = document.getElementById("btn-nope");
+    const btnYep = document.getElementById("btn-yep");
+    const btnSkip = document.getElementById("btn-skip");
+
+    let current = null;     // currently displayed submission
+    let nextItem = null;    // prefetched next submission
+    let busy = false;
+
+    async function fetchNext() {
+      const r = await fetch("/api/feed/next");
+      if (r.status === 503) {
+        const j = await r.json().catch(() => ({}));
+        if (j.paused) return { paused: true };
+      }
+      return r.json();
+    }
+
+    function buildCard(item) {
+      const card = document.createElement("div");
+      card.className = "vote-card";
+      const media = item.kind === "photo"
+        ? `<img src="${item.media_url}" alt="" />`
+        : `<iframe src="${item.media_url.replace(/\/manifest\/video\.m3u8.*$/, "/iframe?autoplay=true&muted=true&loop=true")}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+      const overlay = `<div class="vote-overlay" style="pointer-events:auto">
+        ${item.caption ? `<div class="vote-caption">${escapeHtml(item.caption)}</div>` : ""}
+        <div class="vote-credit" style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
+          <span>${item.display_name ? `— ${escapeHtml(item.display_name)}` : "&nbsp;"}</span>
+          <span>
+            <a href="/c/${item.slug}" style="color:var(--ink-mute);font-size:0.7rem;letter-spacing:0.15em">permalink</a>
+            <a href="/report?id=${item.id}" style="color:var(--ink-mute);font-size:0.7rem;letter-spacing:0.15em;margin-left:0.75rem">report</a>
+          </span>
+        </div>
+      </div>`;
+      card.innerHTML = media + overlay;
+      return card;
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+
+    async function render() {
+      // Clear any old card
+      stage.querySelectorAll(".vote-card").forEach((n) => n.remove());
+      empty.hidden = true;
+      paused.hidden = true;
+
+      if (!current) {
+        const r = nextItem || await fetchNext();
+        nextItem = null;
+        if (r.paused) { paused.hidden = false; return; }
+        if (r.done || !r.id) { empty.hidden = false; return; }
+        current = r;
+      }
+      const card = buildCard(current);
+      stage.appendChild(card);
+
+      // Prefetch the next one in the background
+      if (!nextItem) {
+        fetchNext().then((r) => { if (!r.paused && !r.done) nextItem = r; }).catch(() => {});
+      }
+    }
+
+    async function castVote(outcome) {
+      if (busy || !current) return;
+      busy = true;
+      const card = stage.querySelector(".vote-card");
+      if (card) card.classList.add(outcome === "cowboy" ? "swipe-right" : "swipe-left");
+
+      const id = current.id;
+      // optimistic: advance UI immediately
+      setTimeout(() => {
+        current = null;
+        render();
+        busy = false;
+      }, 240);
+
+      try {
+        const r = await fetch("/api/vote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, outcome }),
+        });
+        if (!r.ok && r.status !== 409) {
+          // 409 = already voted (race); silently ignore
+        }
+      } catch {}
+    }
+
+    function skip() {
+      if (busy) return;
+      const card = stage.querySelector(".vote-card");
+      if (card) card.classList.add("swipe-left");
+      setTimeout(() => { current = null; render(); }, 240);
+    }
+
+    btnNope.addEventListener("click", () => castVote("not_cowboy"));
+    btnYep.addEventListener("click", () => castVote("cowboy"));
+    btnSkip.addEventListener("click", skip);
+
+    // Keyboard
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") castVote("not_cowboy");
+      else if (e.key === "ArrowRight") castVote("cowboy");
+      else if (e.key === "ArrowDown" || e.key === " ") { e.preventDefault(); skip(); }
+    });
+
+    // Touch swipe
+    let touchStart = null;
+    stage.addEventListener("touchstart", (e) => {
+      touchStart = e.touches[0].clientX;
+    }, { passive: true });
+    stage.addEventListener("touchend", (e) => {
+      if (touchStart == null) return;
+      const dx = (e.changedTouches[0].clientX) - touchStart;
+      touchStart = null;
+      if (Math.abs(dx) < 60) return;
+      if (dx > 0) castVote("cowboy");
+      else castVote("not_cowboy");
+    });
+
+    render();
+  </script>
+</body>
+</html>

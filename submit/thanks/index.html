@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>thanks · cowboysdocowboyshit</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="text-page">
+  <header class="topbar">
+    <a class="brand" href="/">cowboysdocowboyshit</a>
+    <nav><a href="/vote">vote</a><a href="/leaderboard">leaderboard</a><a href="/submit">submit</a></nav>
+  </header>
+  <main>
+    <h1>got it</h1>
+    <p id="status-line">Your submission is in the queue. We review every one before it goes public — usually within a few hours, sometimes longer.</p>
+    <p>If it gets approved you'll see it on the feed at <a href="/vote">/vote</a> and on the leaderboard.</p>
+    <p>You can keep this link if you want to check back: <code id="permalink-hint">—</code></p>
+    <p style="margin-top:2rem"><a class="btn" href="/vote">vote on what's already there</a></p>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const slug = params.get("slug");
+    const hint = document.getElementById("permalink-hint");
+    if (slug) hint.textContent = `cowboysdocowboyshit.com/c/${slug}`;
+    if (slug) {
+      // poll status quietly
+      const poll = async () => {
+        try {
+          const r = await fetch(`/api/submission/${slug}/status`);
+          if (!r.ok) return;
+          const j = await r.json();
+          const line = document.getElementById("status-line");
+          if (j.status === "approved") {
+            line.innerHTML = `Approved. <a href="/c/${slug}">go look at it</a>.`;
+          } else if (j.status === "rejected") {
+            line.textContent = `Rejected${j.reject_reason ? ` (${j.reject_reason})` : ""}. <a href="/about/why-removed">why?</a>`;
+          }
+        } catch {}
+      };
+      poll();
+      setInterval(poll, 30000);
+    }
+  </script>
+</body>
+</html>

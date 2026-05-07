@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>admin · cowboysdocowboyshit</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="admin-page">
+  <header class="topbar">
+    <a class="brand" href="/">cowboysdocowboyshit</a>
+    <nav>
+      <a href="/admin" class="active">queue</a>
+      <a href="/admin?view=reports">reports</a>
+      <a href="/" style="color:var(--ink-mute)">exit</a>
+    </nav>
+  </header>
+  <main class="admin-main">
+    <div class="hotkey-hint">A or →: approve · R or ←: reject · S or space: skip</div>
+    <div id="queue"></div>
+    <div class="admin-empty" id="empty" hidden>
+      <h2 style="font-family:var(--display);text-transform:uppercase;letter-spacing:0.1em">all clear</h2>
+      <p>queue is empty.</p>
+    </div>
+  </main>
+
+  <script>
+    const view = new URLSearchParams(location.search).get("view") || "queue";
+    const queueEl = document.getElementById("queue");
+    const emptyEl = document.getElementById("empty");
+    let items = [];
+    let cursor = 0;
+    let busy = false;
+
+    function escapeHtml(s) {
+      return (s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    }
+
+    async function load() {
+      const url = view === "reports" ? "/api/admin/reports" : "/api/admin/queue";
+      const r = await fetch(url);
+      if (r.status === 401) {
+        queueEl.innerHTML = `<p style="text-align:center;padding:3rem;color:var(--ink-dim)">not authorized. you have to come through cloudflare access.</p>`;
+        return;
+      }
+      const j = await r.json();
+      items = j.items || [];
+      cursor = 0;
+      render();
+    }
+
+    function render() {
+      queueEl.innerHTML = "";
+      emptyEl.hidden = items.length > 0;
+      if (cursor >= items.length) {
+        emptyEl.hidden = false;
+        return;
+      }
+      const it = items[cursor];
+      const media = it.kind === "photo"
+        ? `<img src="${escapeHtml(it.media_url)}" alt="" />`
+        : `<iframe src="${escapeHtml(it.media_url.replace(/\/manifest\/video\.m3u8.*$/, "/iframe"))}" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+      const card = document.createElement("div");
+      card.className = "queue-card";
+      card.innerHTML = `
+        <div class="queue-media">${media}</div>
+        <div class="queue-meta">
+          <div class="meta-row">
+            ${cursor + 1} of ${items.length} ·
+            ${escapeHtml(it.kind)} ·
+            ${escapeHtml(it.created_at || it.status || "")}${it.report_count ? ` · <span style="color:var(--bad)">${it.report_count} reports</span>` : ""}
+          </div>
+          ${it.caption ? `<div>“${escapeHtml(it.caption)}”</div>` : ""}
+          ${it.display_name ? `<div class="meta-row">— ${escapeHtml(it.display_name)}</div>` : ""}
+        </div>
+        <div class="queue-actions">
+          <button class="reject" data-act="reject">reject (R)</button>
+          <button class="skip" data-act="skip">skip (S)</button>
+          <button class="approve" data-act="approve">approve (A)</button>
+        </div>
+      `;
+      card.querySelectorAll("button").forEach((b) => {
+        b.addEventListener("click", () => act(b.dataset.act));
+      });
+      queueEl.appendChild(card);
+    }
+
+    async function act(action) {
+      if (busy) return;
+      const it = items[cursor];
+      if (!it) return;
+      busy = true;
+      try {
+        if (action === "approve") {
+          await fetch("/api/admin/approve", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: it.id }),
+          });
+        } else if (action === "reject") {
+          const reason = prompt("reject reason (optional)", "") || null;
+          await fetch("/api/admin/reject", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: it.id, reason }),
+          });
+        }
+        cursor++;
+        render();
+      } finally {
+        busy = false;
+      }
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "a" || e.key === "A" || e.key === "ArrowRight") act("approve");
+      else if (e.key === "r" || e.key === "R" || e.key === "ArrowLeft") act("reject");
+      else if (e.key === "s" || e.key === "S" || e.key === " ") { e.preventDefault(); act("skip"); }
+    });
+
+    load();
+  </script>
+</body>
+</html>
