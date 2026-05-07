@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#0a0805"/>
+  <g fill="none" stroke="#f4ead5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <!-- minimal longhorn silhouette -->
+    <path d="M14 30 Q 22 22 32 24 Q 42 22 50 30"/>
+    <ellipse cx="32" cy="38" rx="9" ry="7"/>
+    <circle cx="29" cy="37" r="1" fill="#f4ead5"/>
+    <circle cx="35" cy="37" r="1" fill="#f4ead5"/>
+    <path d="M32 42 L 32 45"/>
+  </g>
+</svg>
