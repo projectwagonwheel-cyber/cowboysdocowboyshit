@@ -1,0 +1,29 @@
+name = "cowboysdocowboyshit"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "."
+
+# D1 database — create with: wrangler d1 create cowboyshit
+# then paste the returned database_id here.
+[[d1_databases]]
+binding = "DB"
+database_name = "cowboyshit"
+database_id = "REPLACE_WITH_D1_ID"
+migrations_dir = "migrations"
+
+# R2 bucket for photo storage — create with: wrangler r2 bucket create cowboyshit-media
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "cowboyshit-media"
+
+# Public URL where R2 photos are served. After creating the bucket, attach
+# a custom domain (e.g. media.cowboysdocowboyshit.com) in the Cloudflare
+# dashboard and put it here.
+[vars]
+MEDIA_PUBLIC_URL = "https://media.cowboysdocowboyshit.com"
+
+# Secrets (set via `wrangler pages secret put <name>`):
+#   CF_ACCOUNT_ID          — your Cloudflare account ID (for Stream API)
+#   CF_STREAM_API_TOKEN    — token with Stream:Edit permission
+#   ADMIN_EMAIL            — email allowed to access /admin (matches Cloudflare Access policy)
+#   KILL_SWITCH_TOKEN      — bearer token for hitting /api/kill-switch from a phone in an emergency
