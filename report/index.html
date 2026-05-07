@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>report · cowboysdocowboyshit</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="submit-page">
+  <header class="topbar">
+    <a class="brand" href="/">cowboysdocowboyshit</a>
+    <nav><a href="/vote">vote</a><a href="/leaderboard">leaderboard</a><a href="/submit">submit</a></nav>
+  </header>
+  <main>
+    <form class="form-card" id="report-form">
+      <h1>report this submission</h1>
+      <p>For copyright complaints, use <a href="/dmca">/dmca</a> instead — that route requires a sworn statement.</p>
+      <input type="hidden" id="sub-id" />
+      <div>
+        <label for="reason">reason</label>
+        <select id="reason" style="width:100%;background:var(--bg-2);color:var(--ink);border:1px solid var(--rule);padding:0.75rem;font-family:var(--body);font-size:1rem;border-radius:2px">
+          <option value="nsfw">NSFW / sexual content</option>
+          <option value="violence">violence or harm</option>
+          <option value="harassment">harassment / personal attack</option>
+          <option value="spam">spam</option>
+          <option value="off_topic">off-topic / not cowboy</option>
+          <option value="other">other</option>
+        </select>
+      </div>
+      <div>
+        <label for="notes">notes (optional)</label>
+        <textarea id="notes" maxlength="200"></textarea>
+      </div>
+      <div class="error" id="err" hidden></div>
+      <div class="success" id="ok" hidden>thanks. we'll look at it.</div>
+      <button class="btn" type="submit" id="btn">send report</button>
+    </form>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const subId = params.get("id");
+    document.getElementById("sub-id").value = subId || "";
+    if (!subId) document.getElementById("err").textContent = "missing submission id";
+    if (!subId) document.getElementById("err").hidden = false;
+
+    document.getElementById("report-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!subId) return;
+      const btn = document.getElementById("btn");
+      btn.disabled = true;
+      const reason = document.getElementById("reason").value + "; " + (document.getElementById("notes").value || "");
+      const r = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: subId, reason }),
+      });
+      if (r.ok) {
+        document.getElementById("ok").hidden = false;
+        btn.textContent = "sent";
+      } else {
+        const j = await r.json().catch(() => ({}));
+        document.getElementById("err").textContent = j.error || "failed";
+        document.getElementById("err").hidden = false;
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
