@@ -1,64 +1,119 @@
 # cowboysdocowboyshit.com
 
-Landing page for cowboysdocowboyshit.com. Started as a quick cinematic teaser; the project will evolve past the landing page later.
+UGC ranking site. People upload cowboy shit. Strangers swipe to rank how cowboy
+it is. Daily / weekly / all-time leaderboards crown winners.
+
+The product plan lives at `.plans/ugc-platform.md`. Read it before changing
+the shape of the app.
 
 ## Stack
 
-- Static HTML + CSS, no build step, no framework
-- Auto-deploys to Cloudflare Pages on push to `main`
-- Custom domain wiring is in progress (see "Status" below)
+- Frontend: vanilla HTML + CSS + JS, no build step, no framework.
+- Backend: Cloudflare Pages Functions (TypeScript) + Hono router.
+- Database: Cloudflare D1 (SQLite at the edge).
+- Photo storage: Cloudflare R2.
+- Video pipeline: Cloudflare Stream (handles transcoding, player, posters).
+- Admin gate: Cloudflare Access policy in front of `/admin` and `/api/admin/*`.
+- Auto-deploy: GitHub Actions → `wrangler pages deploy` on push to `main`.
 
 ## Repo & hosting
 
 - GitHub: https://github.com/projectwagonwheel-cyber/cowboysdocowboyshit
-- Hosting: Cloudflare Pages (free, auto-deploy on push)
+- Hosting: Cloudflare Pages
 - DNS: Cloudflare
-- Domain: cowboysdocowboyshit.com (newly acquired)
-
-**Vultr is not used here.** The user has a Vultr VPS for justranching but this site is static and lives entirely on Cloudflare Pages. If the project later grows a backend, the typical split is: static frontend stays on Pages, app/server goes on Vultr.
+- Domain: cowboysdocowboyshit.com
 
 ## Local dev
 
 ```sh
-# Just open index.html, or serve it:
-python3 -m http.server 8000
+npm install
+npm run db:migrate:local      # apply migrations to local D1
+npm run dev                    # wrangler pages dev
 ```
 
-No install step.
+The dev server runs at http://localhost:8788 with a local D1 + a local R2
+emulator. Stream calls hit production (there's no local emulator), so video
+upload won't work locally without `CF_STREAM_API_TOKEN` in `.dev.vars`.
 
 ## File layout
 
 ```
-index.html        Hero markup
-styles.css        All styling (cinematic crossfade, vignette, type)
-assets/           Photo + video source material (raw, unoptimized)
-.claude/agents/   Project-specific agents (see below)
+index.html                Homepage (cinematic landing + winner pin + CTAs)
+styles.css                All styling, both registers (cinematic + utility)
+app.js                    Shared client glue (share button)
+favicon.svg               Minimal longhorn mark
+404.html                  404
+vote/                     Swipe-rank UI
+submit/                   Upload form (photo or video, two-step for video)
+submit/thanks/            Post-submit "in the queue" page
+leaderboard/              Today / week / all-time
+admin/                    Moderation queue (gated by Cloudflare Access)
+about/, terms/, privacy/, dmca/, report/   Static text pages
+functions/                Pages Functions (Workers)
+  api/[[path]].ts         All API routes (Hono router)
+  c/[slug].ts             Server-rendered permalink (with OG meta)
+  og/[slug].ts            OG image redirect (phase 1: just the photo)
+  _lib/                   Shared utilities (db, hash, elo, slug, auth, stream)
+migrations/               D1 SQL migrations
+wrangler.toml             Bindings + vars
+.github/workflows/        CI deploy
+.plans/                   Implementation plan (read this!)
+assets/                   Founder's source media (NOT served on prod)
 ```
-
-## Open questions / decisions in progress
-
-These are unresolved — don't assume an answer, ask the user:
-
-1. **Hero media** — assets/ has 3 .jpeg photos and 4 .MOV videos. The current page references `assets/photo-1.jpg` and `assets/photo-2.jpg` (placeholders that don't exist). The user has not yet picked which media to feature, and whether the hero is photo crossfade or looping video.
-2. **Final copy** — current placeholder is "cowboys do cowboy shit" headline + "coming soon" tagline. Not confirmed.
-3. **Where cows fit** — the user wants cows involved somewhere but hasn't decided where (favicon, logo mark, easter egg, background layer, dedicated section). Recommended default: favicon + small SVG cow above the title. Don't ship cows without confirming placement.
-4. **Custom domain** — DNS-to-Pages wiring was in progress when the prior session ended. The Cloudflare Pages → GitHub connection state is unverified. Before iterating, confirm the site is actually deploying.
-
-## Media notes (important)
-
-The `.MOV` files in `assets/` are raw iPhone exports. **They will not play reliably in browsers.** Before wiring any video into the page it needs to be transcoded to web-friendly H.264 `.mp4` (and ideally a `.webm` fallback) and compressed. The `media-optimizer` agent handles this — see `.claude/agents/`.
 
 ## Conventions
 
-- Small commits with verbose messages (the user prefers this).
-- Don't add a build step, framework, or dependencies without asking. The whole point is that it's a single HTML file you can open.
-- Don't add features beyond what the task asks for. No analytics, no email signup, no cookie banner unless requested.
-- Comments: only when the WHY is non-obvious. The CSS animation timing has no surprises; the markup is self-explanatory.
+- Small commits, verbose messages.
+- No frameworks on the frontend. No React. No SPA. If you need to add a
+  build step, ask first.
+- TypeScript inside `functions/`. Plain HTML/CSS/JS at the surface.
+- Server-side: trust Cloudflare's edge for rate limiting and bandwidth;
+  don't reinvent it.
+- Two visual registers: cinematic for marketing surfaces (home, leaderboard,
+  permalink), utilitarian for the voting/submit/admin surfaces. Don't mix.
+- Comments only when the WHY is non-obvious.
+- Don't ship NSFW classifier, accounts, comments, categories, or merch
+  without checking the plan — those are explicitly phase 2/3.
 
-## Status (last session: 2026-04-25 → 2026-04-28)
+## Routing
 
-- Repo created and pushed to GitHub
-- Initial scaffold committed (placeholder hero, raw assets in `assets/`)
-- Cloudflare Pages connection: user said "i think im live" but never pasted the `*.pages.dev` URL — deployment status unverified
-- Custom domain (cowboysdocowboyshit.com → Pages): not yet wired up
-- Hero media not yet selected; raw `.MOV` files unoptimized
+Pages serves static HTML by default. Three routes are functions:
+- `/api/*` → `functions/api/[[path]].ts` (Hono catch-all)
+- `/c/:slug` → server-rendered permalink with OG tags
+- `/og/:slug` → OG image (phase 1: redirects to the photo URL)
+
+`_routes.json` whitelists those — everything else falls through to static.
+
+## Bindings
+
+- `DB` — D1 database (`cowboyshit`)
+- `MEDIA` — R2 bucket (`cowboyshit-media`)
+- Vars: `MEDIA_PUBLIC_URL` (custom domain pointing at the R2 bucket)
+- Secrets: `CF_ACCOUNT_ID`, `CF_STREAM_API_TOKEN`, `ADMIN_EMAIL`,
+  `KILL_SWITCH_TOKEN`
+
+## Admin
+
+`/admin` is protected by a Cloudflare Access policy (configured in the
+dashboard, not in code). Inside the function, `isAdmin()` checks the
+`Cf-Access-Authenticated-User-Email` header against `ADMIN_EMAIL`.
+
+## Kill switch
+
+If something illegal lands publicly:
+```sh
+curl -X POST https://cowboysdocowboyshit.com/api/kill-switch \
+  -H "Authorization: Bearer $KILL_SWITCH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"paused": true}'
+```
+The vote feed and vote endpoint return 503 until you flip it back.
+
+## Status (last session: 2026-05-06)
+
+- Phase 1 scaffold complete: schema, all API routes, all UI pages, deploy
+  workflow. Everything wired locally; remote deploy needs Cloudflare
+  resources enabled (see `DEPLOY.md`).
+- Open hand-off items (require user's hands, not Claude's): create the D1
+  database, R2 bucket, custom domain for media bucket, Cloudflare Access
+  policy on `/admin*`, GitHub Actions secrets, set Pages secrets.

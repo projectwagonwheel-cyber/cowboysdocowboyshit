@@ -1,18 +1,34 @@
 # cowboysdocowboyshit.com
 
-Landing page for cowboysdocowboyshit.com.
+People upload their cowboy shit. The internet ranks how cowboy it is.
+
+## Quick start
+
+```sh
+npm install
+npm run db:migrate:local
+npm run dev               # http://localhost:8788
+```
 
 ## Stack
 
-Static HTML + CSS. No build step.
+Cloudflare Pages + Pages Functions (TypeScript / Hono) + D1 + R2 + Stream.
+Vanilla HTML/CSS/JS frontend, no build step.
 
-## Local dev
+## Routes
 
-```sh
-# Just open index.html, or serve it:
-python3 -m http.server 8000
-```
+| Route               | What                                       |
+| ------------------- | ------------------------------------------ |
+| `/`                 | Cinematic landing                          |
+| `/vote`             | Swipe-rank feed (Elo)                      |
+| `/submit`           | Upload form                                |
+| `/leaderboard`      | Today / week / all-time                    |
+| `/c/<slug>`         | Submission permalink (server-rendered OG)  |
+| `/admin`            | Moderation queue (Cloudflare Access gated) |
+| `/about`, `/terms`, `/privacy`, `/dmca`, `/report` | Static                  |
 
-## Deploy
+## Docs in this repo
 
-TBD.
+- `CLAUDE.md` — architecture, conventions, layout
+- `DEPLOY.md` — first-time deploy hand-off (the parts that need your hands)
+- `.plans/ugc-platform.md` — the product plan
